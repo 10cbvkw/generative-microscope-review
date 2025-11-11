@@ -2,82 +2,193 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EM Generalist — App Selector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EM Generalist — App Entry</title>
   <style>
+    :root {
+      --bg:#0b0c10; --fg:#e6e6e6; --acc:#66fcf1; --btn:#45a29e; --err:#ff8a8a; --warn:#ffdd88;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: system-ui, sans-serif;
-      background: #0b0c10;
-      color: #e6e6e6;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
+      margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--fg);
     }
-    h1 { color: #66fcf1; margin-bottom: 0.5rem; }
-    p { max-width: 600px; text-align: center; }
-    button {
-      background: #45a29e;
-      border: none;
-      color: #fff;
-      font-size: 1rem;
-      padding: 0.8rem 1.4rem;
-      margin: 0.5rem;
-      border-radius: 0.4rem;
-      cursor: pointer;
+    .card {
+      width:min(860px, 92vw); background:#111418; border:1px solid #1f2833; border-radius:14px;
+      padding:28px 24px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
-    button:hover { background: #66fcf1; color: #000; }
-    #status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.8; }
+    h1{ color:var(--acc); margin:0 0 .35rem 0; }
+    p.sub { margin:.2rem 0 1rem 0; opacity:.85 }
+    .row{ display:flex; flex-wrap:wrap; gap:.75rem; margin:.5rem 0 1rem 0; }
+    button, a.btn {
+      background:var(--btn); color:#fff; border:none; border-radius:10px; padding:.8rem 1.2rem;
+      text-decoration:none; cursor:pointer; font-weight:600;
+    }
+    button:hover, a.btn:hover { background: var(--acc); color:#111; }
+    .ghost { background:transparent; border:1px dashed #2b3643; color:#cfd8dc }
+    .pill { display:inline-block; padding:.2rem .55rem; border-radius:999px; font-size:.85rem; }
+    .ok { background:#1f3c3a; color:#9cf8e8 }
+    .warn { background:#3b2f12; color:#ffd98a }
+    .err { background:#3b1616; color:#ffb0b0 }
+    .muted { opacity:.75 }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .hr { height:1px; background:#1f2833; margin:1rem 0; border:0; }
+    .flex { display:flex; gap:.6rem; align-items:center }
+    .spinner {
+      width:18px; height:18px; border:3px solid #2b3643; border-top-color: var(--acc);
+      border-radius:50%; animation:spin 1s linear infinite;
+    }
+    @keyframes spin { to{ transform: rotate(360deg);} }
+    .help { font-size:.9rem; opacity:.85 }
+    .kbd { border:1px solid #54606d; padding:.05rem .35rem; border-radius:6px; }
   </style>
 </head>
 <body>
-  <h1>EM Generalist</h1>
-  <p>
-    Choose how you want to open the app.<br>
-    The online version is usually faster and more stable, but you can also run your local instance if the remote service is unavailable.
-  </p>
+  <div class="card" id="app">
+    <h1>EM Generalist</h1>
+    <p class="sub">Choose a runtime. The online app is recommended; if it is slow, requires login, or appears blank, switch to the local GPU instance.</p>
 
-  <div id="buttons">
-    <button id="onlineBtn">Launch Online App (Recommended)</button>
-    <button id="localBtn">Use Local GPU Instance</button>
+    <div class="row">
+      <button id="tryOnline" title="Open the remote service in a new tab (recommended)">Launch Online App (Recommended)</button>
+      <a class="btn" id="useLocal" href="#" title="Open your local GPU instance via tunnel">Use Local GPU Instance</a>
+      <button id="retry" class="ghost" title="Re-run availability check">Retry Check</button>
+    </div>
+
+    <div class="row flex">
+      <div class="spinner" id="spin" aria-hidden="true"></div>
+      <div id="status" class="muted">Checking online availability…</div>
+    </div>
+
+    <div id="diag" class="help mono"></div>
+    <hr class="hr" />
+
+    <div class="help">
+      <div><span class="pill ok">Tip</span> Online opens in a <b>new tab</b>, so this page stays here as a safety net. If the new tab is blank for long (>30 s), return here and click <b>Use Local GPU Instance</b>.</div>
+      <div style="margin-top:.4rem"><span class="pill warn">Note</span> Some providers require <b>login</b> before access. Long waiting without UI is often a login wall or heavy cold start.</div>
+      <div style="margin-top:.4rem"><span class="pill err">If it fails</span> Press <span class="kbd">Retry</span>, or choose the local instance. Network offline/slow will be detected below.</div>
+    </div>
   </div>
 
-  <div id="status">Checking online availability...</div>
-
   <script>
-    const onlineURL = "https://bohrium.dp.tech/public/apps/vem-dps-web-trial";
-    const localURL  = "https://www.emgeneralist.xyz";
+    // ---------- Configuration ----------
+    const ONLINE_URL = "https://bohrium.dp.tech/public/apps/vem-dps-web-trial";
+    const LOCAL_URL  = "https://www.emgeneralist.xyz";
 
+    // Time budgets (milliseconds)
+    const PROBE_TIMEOUT   = 5000;   // quick reachability test
+    const SOFT_WARN_MS    = 10000;  // show "taking long" warning
+    const HARD_FALLBACKMS = 30000;  // suggest switching to local after 30s
+
+    // ---------- DOM ----------
     const statusEl = document.getElementById("status");
-    const onlineBtn = document.getElementById("onlineBtn");
-    const localBtn = document.getElementById("localBtn");
+    const diagEl   = document.getElementById("diag");
+    const spinEl   = document.getElementById("spin");
+    const btnOnline= document.getElementById("tryOnline");
+    const btnLocal = document.getElementById("useLocal");
+    const btnRetry = document.getElementById("retry");
 
-    // Try fetching a small HEAD request to test if online app is available.
-    async function checkOnline() {
+    // ---------- Utilities ----------
+    function log(msg){ console.log("[entry]", msg); diagEl.textContent = msg; }
+    function setStatus(html){ statusEl.innerHTML = html; }
+    function setSpinner(on){ spinEl.style.visibility = on ? "visible" : "hidden"; }
+
+    // Catch hard JS errors to avoid silent white screen on this page
+    window.addEventListener("error", (e) => {
+      setStatus(`<span class="pill err">Error</span> ${e.message}`);
+      log(String(e.error || e.message));
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      setStatus(`<span class="pill err">Promise</span> ${e.reason || "Unhandled rejection"}`);
+      log(String(e.reason));
+    });
+
+    // Network online/offline hints
+    function updateOnLine(){
+      if(navigator.onLine){
+        statusEl.insertAdjacentHTML("beforeend", ` <span class="pill ok">Online</span>`);
+      }else{
+        statusEl.insertAdjacentHTML("beforeend", ` <span class="pill err">Offline</span>`);
+      }
+    }
+    window.addEventListener('online', updateOnLine);
+    window.addEventListener('offline', updateOnLine);
+
+    // Quick reachability probe: HEAD/no-cors with abort timeout.
+    async function probeOnline() {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
-        const response = await fetch(onlineURL, { method: "HEAD", mode: "no-cors", signal: controller.signal });
-        clearTimeout(timeout);
-        // Even if CORS blocks headers, a successful fetch won't throw
-        statusEl.textContent = "✅ Online service reachable. Redirecting in 3 seconds...";
-        setTimeout(() => window.location.href = onlineURL, 3000);
-      } catch (e) {
-        statusEl.textContent = "⚠️ Online service unreachable or slow. You can open the local app instead.";
+        // CORS might mask status; success == "no exception thrown".
+        await fetch(ONLINE_URL, { method:"HEAD", mode:"no-cors", signal: ctrl.signal, cache:"no-store" });
+        clearTimeout(t);
+        return true;
+      } catch(e) {
+        clearTimeout(t);
+        log("Probe failed: " + (e && e.message ? e.message : String(e)));
+        return false;
       }
     }
 
-    onlineBtn.addEventListener("click", () => {
-      window.location.href = onlineURL;
-    });
+    // Progressive UX against "long loading" and "blank page" after navigation
+    function setupWatchdogForNewTab(winRef){
+      // Soft warning after 10s
+      const soft = setTimeout(()=>{
+        setStatus(`<span class="pill warn">Taking long</span> The online app is still loading… If you see a blank page or a login wall, you may switch to the local instance.`);
+      }, SOFT_WARN_MS);
 
-    localBtn.addEventListener("click", () => {
-      window.location.href = localURL;
-    });
+      // Hard suggestion after 30s
+      const hard = setTimeout(()=>{
+        setStatus(`<span class="pill err">Slow / blocked</span> The online app seems very slow or blocked. Please use the <b>Local GPU Instance</b>.`);
+      }, HARD_FALLBACKMS);
 
-    checkOnline();
+      // If the user closes the new tab (common when they see nothing), timers remain — OK.
+      // Optional: we could ping in focus/visibilitychange to fine-tune messaging.
+      return () => { clearTimeout(soft); clearTimeout(hard); };
+    }
+
+    async function runCheck(autoRedirect=true){
+      setSpinner(true);
+      setStatus(`Checking online availability…`);
+      diagEl.textContent = "";
+
+      // Quick connectivity hint
+      updateOnLine();
+
+      const ok = await probeOnline();
+      setSpinner(false);
+
+      if(ok){
+        setStatus(`<span class="pill ok">Reachable</span> Redirecting to the online app in 3 seconds…`);
+        if(autoRedirect){
+          // Open in a new tab to preserve this safety page
+          const w = window.open(ONLINE_URL, "_blank", "noopener");
+          const cancelWatch = setupWatchdogForNewTab(w);
+          // If popup blocked by browser, fall back to same-tab navigation.
+          if(!w){
+            setStatus(`<span class="pill warn">Popup blocked</span> Opening in this tab…`);
+            const to = setTimeout(()=>{ window.location.href = ONLINE_URL; }, 1500);
+          }
+        }
+      }else{
+        setStatus(`<span class="pill err">Online Unreachable</span> You can use the local GPU instance now.`);
+      }
+    }
+
+    // Event wiring
+    btnOnline.addEventListener("click", ()=>{
+      const w = window.open(ONLINE_URL, "_blank", "noopener");
+      setupWatchdogForNewTab(w);
+      if(!w){ window.location.href = ONLINE_URL; }
+    });
+    btnLocal.addEventListener("click", (e)=>{
+      e.preventDefault();
+      window.location.href = LOCAL_URL;
+    });
+    btnRetry.addEventListener("click", ()=> runCheck(false));
+
+    // Initial check on load
+    runCheck(true);
   </script>
 </body>
 </html>
