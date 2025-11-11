@@ -1,16 +1,83 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta http-equiv="refresh" content="0; url=https://bohrium.dp.tech/public/apps/vem-dps-web-trial" />
-    <title>Redirecting...</title>
-  </head>
-  <body>
-    <p>
-      If you are not redirected automatically, click
-      <a href="https://www.emgeneralist.xyz">here</a>.
-    </p>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EM Generalist — App Selector</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0b0c10;
+      color: #e6e6e6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    h1 { color: #66fcf1; margin-bottom: 0.5rem; }
+    p { max-width: 600px; text-align: center; }
+    button {
+      background: #45a29e;
+      border: none;
+      color: #fff;
+      font-size: 1rem;
+      padding: 0.8rem 1.4rem;
+      margin: 0.5rem;
+      border-radius: 0.4rem;
+      cursor: pointer;
+    }
+    button:hover { background: #66fcf1; color: #000; }
+    #status { margin-top: 1rem; font-size: 0.9rem; opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <h1>EM Generalist</h1>
+  <p>
+    Choose how you want to open the app.<br>
+    The online version is usually faster and more stable, but you can also run your local instance if the remote service is unavailable.
+  </p>
+
+  <div id="buttons">
+    <button id="onlineBtn">Launch Online App (Recommended)</button>
+    <button id="localBtn">Use Local GPU Instance</button>
+  </div>
+
+  <div id="status">Checking online availability...</div>
+
+  <script>
+    const onlineURL = "https://bohrium.dp.tech/public/apps/vem-dps-web-trial";
+    const localURL  = "https://www.emgeneralist.xyz";
+
+    const statusEl = document.getElementById("status");
+    const onlineBtn = document.getElementById("onlineBtn");
+    const localBtn = document.getElementById("localBtn");
+
+    // Try fetching a small HEAD request to test if online app is available.
+    async function checkOnline() {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
+        const response = await fetch(onlineURL, { method: "HEAD", mode: "no-cors", signal: controller.signal });
+        clearTimeout(timeout);
+        // Even if CORS blocks headers, a successful fetch won't throw
+        statusEl.textContent = "✅ Online service reachable. Redirecting in 3 seconds...";
+        setTimeout(() => window.location.href = onlineURL, 3000);
+      } catch (e) {
+        statusEl.textContent = "⚠️ Online service unreachable or slow. You can open the local app instead.";
+      }
+    }
+
+    onlineBtn.addEventListener("click", () => {
+      window.location.href = onlineURL;
+    });
+
+    localBtn.addEventListener("click", () => {
+      window.location.href = localURL;
+    });
+
+    checkOnline();
+  </script>
+</body>
 </html>
-
-
-
